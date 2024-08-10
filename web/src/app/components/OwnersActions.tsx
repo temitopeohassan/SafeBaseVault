@@ -1,22 +1,7 @@
-
-
-
-
-
-
-
-
-
-
-
 import "../assets/style/OwnersActions.css";
 import { useState, ChangeEvent } from "react";
 import { parseEther } from "viem";
-import {
-  usePrepareContractWrite,
-  useContractWrite,
-  useWaitForTransaction,
-} from "wagmi";
+import { useWriteContract, useTransactionConfirmations } from "wagmi";
 import useDebounce from "../hooks/useDebounce";
 import MultiSigWallet from "../artifacts/contracts/MultiSigWallet.sol/MultiSigWallet.json";
 
@@ -38,47 +23,35 @@ function OwnersActions({ scAddress, isOwner }: OwnersActionsProps) {
   const debouncedWithdrawEth = useDebounce(withdrawEthAmt, 1500);
 
   // Contract Write Functions
-  const {
-    config: approveTxnConfig,
-    error: prepareApproveError,
-    isError: prepareApproveIsError,
-  } = usePrepareContractWrite({
-    ...multiSigWalletContract,
-    functionName: "approveWithdrawTx",
-    args: [debouncedApproveId],
-    enabled: typeof debouncedApproveId === "number",
-  });
+  const { writeContract: approveWrite, ...approveResults } = useWriteContract();
+
+  const handleApprove = () => {
+    if (debouncedApproveId !== undefined) {
+      approveWrite({
+        ...multiSigWalletContract,
+        functionName: "approveWithdrawTx",
+        args: [debouncedApproveId],
+      });
+    }
+  };
 
   const {
-    data: approveData,
-    write: approveWrite,
-    isError: approveIsError,
-    error: approveError,
-  } = useContractWrite(approveTxnConfig);
+    writeContract: createWrite,
+    ...createResults
+  } = useWriteContract();
 
-  const { isLoading: approveIsLoading, isSuccess: approveIsSuccess } =
-    useWaitForTransaction({ hash: approveData?.hash });
-
-  const {
-    config: createTxnConfig,
-    error: prepareCreateError,
-    isError: prepareCreateIsError,
-  } = usePrepareContractWrite({
-    ...multiSigWalletContract,
-    functionName: "createWithdrawTx",
-    args: [toAddress, debouncedWithdrawEth],
-    enabled: Boolean(debouncedWithdrawEth),
-  });
-
-  const {
-    data: createData,
-    write: createWrite,
-    isError: createIsError,
-    error: createError,
-  } = useContractWrite(createTxnConfig);
+  const handleCreate = () => {
+    if (debouncedWithdrawEth !== undefined) {
+      createWrite({
+        ...multiSigWalletContract,
+        functionName: "createWithdrawTx",
+        args: [toAddress, debouncedWithdrawEth],
+      });
+    }
+  };
 
   const { isLoading: createIsLoading, isSuccess: createIsSuccess } =
-    useWaitForTransaction({ hash: createData?.hash });
+    useTransactionConfirmations({ hash: createResults.data });
 
   const onChangeAddrCreateTxn = (event: ChangeEvent<HTMLInputElement>) => {
     setToAddress(event.target.value);
@@ -126,7 +99,7 @@ function OwnersActions({ scAddress, isOwner }: OwnersActionsProps) {
               <button
                 className="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 disabled:bg-red-300"
                 disabled={!createWrite || createIsLoading}
-                onClick={() => createWrite?.()}
+                onClick={handleCreate}
               >
                 {createIsLoading ? "Creating..." : "Create"}
               </button>
@@ -136,7 +109,7 @@ function OwnersActions({ scAddress, isOwner }: OwnersActionsProps) {
                 Successfully created a withdrawal transaction!
                 <div>
                   <a
-                    href={`https://sepolia.basescan.org/tx/${createData?.hash}`}
+                    href={`https://sepolia.basescan.org/tx/${createResults.data}`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-blue-500 underline"
@@ -146,9 +119,9 @@ function OwnersActions({ scAddress, isOwner }: OwnersActionsProps) {
                 </div>
               </div>
             )}
-            {(prepareCreateIsError || createIsError) && (
+            {createResults.isError && (
               <div className="mt-3 text-red-500">
-                Error: {(prepareCreateError || createError)?.message}
+                Error: {createResults.error?.message}
               </div>
             )}
           </div>
@@ -174,18 +147,18 @@ function OwnersActions({ scAddress, isOwner }: OwnersActionsProps) {
             <div className="flex justify-end">
               <button
                 className="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 disabled:bg-red-300"
-                disabled={!approveWrite || approveIsLoading}
-                onClick={() => approveWrite?.()}
+                disabled={!approveWrite || approveResults.isError}
+                onClick={handleApprove}
               >
-                {approveIsLoading ? "Approving..." : "Approve"}
+                {approveResults.isError ? "Approving..." : "Approve"}
               </button>
             </div>
-            {approveIsSuccess && (
+            {approveResults.isSuccess && (
               <div className="mt-3 text-green-500">
                 Successfully approved transaction ID #{approveId}!
                 <div>
                   <a
-                    href={`https://sepolia.basescan.org/tx/${approveData?.hash}`}
+                    href={`https://sepolia.basescan.org/tx/${approveResults.data}`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-blue-500 underline"
@@ -195,9 +168,9 @@ function OwnersActions({ scAddress, isOwner }: OwnersActionsProps) {
                 </div>
               </div>
             )}
-            {(prepareApproveIsError || approveIsError) && (
+            {approveResults.isError && (
               <div className="mt-3 text-red-500">
-                Error: {(prepareApproveError || approveError)?.message}
+                Error: {approveResults.error?.message}
               </div>
             )}
           </div>

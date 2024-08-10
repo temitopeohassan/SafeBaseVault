@@ -1,24 +1,14 @@
-
-
-
-
-
-
-
-
-
-
 import "../assets/style/FactoryActions.css";
 import { useState, ChangeEvent } from "react";
 import { useWatchContractEvent, useWriteContract, useTransactionConfirmations } from "wagmi";
-import { isAddress } from "viem";
+import { isAddress, Log, Abi } from "viem";
 import { toast } from "react-toastify";
 import factoryABI from "../artifacts/contracts/Factory.sol/Factory.json";
 import useDebounce from "../hooks/useDebounce";
 
 const factoryContract = {
   address: process.env.REACT_APP_FACTORY_ADDRESS as `0x${string}`,
-  abi: factoryABI.abi,
+  abi: factoryABI.abi as Abi,
 };
 
 interface FactoryActionsProps {
@@ -36,14 +26,14 @@ function FactoryActions({ userAddress, walletRefetch }: FactoryActionsProps) {
     address: factoryContract.address,
     abi: factoryContract.abi,
     eventName: "WalletCreated",
-    listener(log) {
+    onLogs: (logs: Log[]) => {
       walletRefetch();
-      if (log?.args?.sender === userAddress) {
-        const userEvent = log.args;
-        toast.success(`Wallet Id #${parseInt(userEvent?.index)} created!`);
+      const log = logs[0] as Log & { args: { sender: `0x${string}`, index: bigint } };
+      if (log.args.sender === userAddress) {
+        toast.success(`Wallet Id #${log.args.index.toString()} created!`);
       }
     },
-  });
+  } as const);
 
   const [formRows, setFormRows] = useState<FormRow[]>([{ id: 1 }]);
   const [quoremRequired, setQuoremRequired] = useState<string>("");
@@ -62,21 +52,28 @@ function FactoryActions({ userAddress, walletRefetch }: FactoryActionsProps) {
   };
 
   const prepareAddresses = () => {
-    const validAddresses = formRows.filter((row) => isAddress(row.address));
-    return validAddresses.map((row) => row.address) as `0x${string}`[];
+    const validAddresses = formRows
+      .filter((row): row is FormRow & { address: string } => 
+        typeof row.address === 'string' && isAddress(row.address)
+      )
+      .map((row) => row.address as `0x${string}`);
+    return validAddresses;
   };
 
-  const { data: createData, write: createWrite } = useWriteContract({
-    address: factoryContract.address,
-    abi: factoryContract.abi,
-    functionName: "createNewWallet",
-    args: [prepareAddresses(), debouncedQuorem],
-    enabled: Boolean(debouncedQuorem),
-  });
+  const { data: hash, writeContract } = useWriteContract();
 
   const { isLoading, isSuccess } = useTransactionConfirmations({
-    hash: createData?.hash,
+    hash,
   });
+
+  const handleCreateWallet = () => {
+    writeContract({
+      address: factoryContract.address,
+      abi: factoryContract.abi,
+      functionName: 'createNewWallet',
+      args: [prepareAddresses(), debouncedQuorem],
+    });
+  };
 
   return (
     <div className="create-wallet-section">
@@ -136,8 +133,8 @@ function FactoryActions({ userAddress, walletRefetch }: FactoryActionsProps) {
         <button
           type="button"
           className="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 disabled:bg-red-300"
-          disabled={!createWrite || isLoading}
-          onClick={() => createWrite?.()}
+          disabled={!writeContract || isLoading}
+          onClick={handleCreateWallet}
         >
           {isLoading ? "Creating..." : "Create"}
         </button>
@@ -146,7 +143,7 @@ function FactoryActions({ userAddress, walletRefetch }: FactoryActionsProps) {
             Created a new wallet successfully!
             <div>
               <a
-                href={`https://sepolia.basescan.org/tx/${createData?.hash}`}
+                href={`https://sepolia.basescan.org/tx/${hash}`}
                 target="_blank"
                 rel="noreferrer"
                 className="text-blue-500 underline"

@@ -1,15 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
 "use client";
 import "../assets/style/UserFeatures.css";
 import { useState, ChangeEvent } from "react";
@@ -54,8 +42,8 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
     address: scAddress,
     abi: MultiSigWallet.abi,
     eventName: "CreateWithdrawTx",
-    listener(logs) {
-      const userEvent = logs[0].args;
+    onLog(logs: { args: any }[]) { // Cast logs to include args
+      const userEvent = logs[0].args; // Ensure logs[0] has the correct structure
       const depositedAmt = formatEther(userEvent?.amount?.toString() || "0");
       toast.success(
         `Withdrawal txnId: ${parseInt(
@@ -69,7 +57,7 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
     address: scAddress,
     abi: MultiSigWallet.abi,
     eventName: "ApproveWithdrawTx",
-    listener(logs) {
+    onLog(logs: { args: any }[]) { // Cast logs to include args
       const userEvent = logs[0].args;
       toast.success(
         `txnId: ${parseInt(
@@ -80,12 +68,13 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
   });
 
   const { data: readData, isLoading: readIsLoading } = useReadContract({
-    contracts: [{ ...multiSigWalletContract, functionName: "getWithdrawTxes" }],
-    watch: true,
+    address: scAddress, // Use address instead of contracts
+    abi: MultiSigWallet.abi, // Add abi directly
+    functionName: "getWithdrawTxes",
   });
 
   const txnsWithId = !readIsLoading
-    ? (readData?.[0]?.result as Transaction[])?.map((txn, index) => ({
+    ? (readData as { result: Transaction[] })?.[0]?.result?.map((txn, index) => ({
         ...txn,
         id: index,
       }))
@@ -96,22 +85,16 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
   );
 
   const {
-    config: depositConfig,
-    error: prepareDepositError,
-    isError: prepareDepositIsError,
-  } = usePrepareContractWrite({
+    data: writeData,
+    write: depositWrite,
+    error: depositError,
+    isError: depositIsError,
+  } = useWriteContract({
     ...multiSigWalletContract,
     functionName: "deposit",
     value: debouncedDeposit,
     enabled: Boolean(debouncedDeposit),
   });
-
-  const {
-    data: writeData,
-    write: depositWrite,
-    error: depositError,
-    isError: depositIsError,
-  } = useWriteContract(depositConfig);
 
   const { isLoading: depositIsLoading, isSuccess: depositIsSuccess } =
     useTransaction({
@@ -175,9 +158,9 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
               </div>
             </div>
           )}
-          {(prepareDepositIsError || depositIsError) && (
+          {(depositIsError) && (
             <div className="custom-word-wrap text-red-500">
-              Error: {(prepareDepositError || depositError)?.message}
+              Error: {depositError?.message}
             </div>
           )}
         </form>

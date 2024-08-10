@@ -1,9 +1,10 @@
 "use client";
 import "../assets/style/ScStats.css";
-import { useContractEvent, useBalance } from "wagmi";
+import { useWatchContractEvent, useBalance } from "wagmi";
 import contractABI from "../artifacts/contracts/MultiSigWallet.sol/MultiSigWallet.json";
 import { toast } from "react-toastify";
 import { formatEther } from "viem";
+import { DecodeEventLogReturnType } from 'viem';
 
 interface ScStatsProps {
   scAddress: `0x${string}`;
@@ -20,17 +21,16 @@ function ScStats({ scAddress, userAddress, quorem, owners }: ScStatsProps) {
 
   const { data: balanceData } = useBalance({
     address: scAddress,
-    watch: true,
   });
 
-  useContractEvent({
+  useWatchContractEvent({
     address: scAddress,
     abi: smartContract.abi,
     eventName: "Deposit",
-    listener(logs) {
-      if (logs[0]?.args && logs[0].args?.sender === userAddress) {
-        const userEvent = logs[0].args;
-        const depositedAmt = formatEther(userEvent?.amount?.toString() || "0");
+    onLogs(logs) {
+      const log = logs[0] as unknown as DecodeEventLogReturnType<typeof smartContract.abi, 'Deposit'>;
+      if (log && log.args && (log.args as any).sender === userAddress) {
+        const depositedAmt = formatEther((log.args as any).amount.toString());
         toast.success(`Deposited ${depositedAmt} Eth!`);
       }
     },
@@ -42,7 +42,7 @@ function ScStats({ scAddress, userAddress, quorem, owners }: ScStatsProps) {
       <div className="mt-3 flex flex-col gap-3 sm:flex-row">
         <p className="statics-data">Contract Address: {scAddress}</p>
         <p className="statics-data">
-          Balance: {balanceData?.formatted} {balanceData?.symbol}
+          Balance: {balanceData?.value} {balanceData?.symbol}
         </p>
         <p className="statics-data">Quorum: {quorem || ""}</p>
       </div>

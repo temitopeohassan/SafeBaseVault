@@ -1,17 +1,6 @@
-
-
-
-
-
-
-
-
-
-
-
 import "../assets/style/ScContract.css";
 import { useState, ChangeEvent } from "react";
-import { useContractRead, useContractReads } from "wagmi";
+import { useReadContract, useReadContracts } from "wagmi";
 import { isAddress } from "viem";
 import ScStats from "./ScStats";
 import UserFeatures from "./UserFeatures";
@@ -37,32 +26,34 @@ function ScContract({ userAddress }: ScContractProps) {
     isLoading: factoryIsLoading,
     isSuccess: factoryReadIsSuccess,
     refetch: walletRefetch,
-  } = useContractRead({
-    ...factoryContract,
+  } = useReadContract({
+    address: factoryContract.address,
+    abi: factoryContract.abi,
     functionName: "getWalletList",
-  });
+  }) as { data: string[] | undefined, isLoading: boolean, isSuccess: boolean, refetch: () => void };
 
   const smartContract = {
     address: scAddress as `0x${string}`,
     abi: contractABI.abi,
   };
 
-  const { data: readData, isSuccess } = useContractReads({
+  const { data: readData, isSuccess } = useReadContracts({
     contracts: [
       {
-        ...smartContract,
+        address: smartContract.address,
+        abi: smartContract.abi,
         functionName: "quoremRequired",
       },
       {
-        ...smartContract,
+        address: smartContract.address,
+        abi: smartContract.abi,
         functionName: "getOwners",
       },
     ],
-    enabled: Boolean(scAddress),
   });
 
-  const quorem = isSuccess ? parseInt(readData?.[0]?.result as string) : null;
-  const owners = isSuccess ? (readData?.[1]?.result as string[]) : [];
+  const quorem = scAddress && isSuccess ? parseInt(readData?.[0]?.result as string) : null;
+  const owners = scAddress && isSuccess ? (readData?.[1]?.result as string[]) : [];
   const isOwner = owners?.includes(userAddress);
 
   return (
@@ -99,7 +90,7 @@ function ScContract({ userAddress }: ScContractProps) {
             <div className="flex space-x-4">
               <button
                 className="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 disabled:bg-red-300"
-                disabled={!isAddress(scAddress) || factoryIsLoading}
+                disabled={!scAddress || !isAddress(scAddress) || factoryIsLoading}
                 onClick={() => setAddressIsReady(true)}
               >
                 Display
@@ -117,20 +108,20 @@ function ScContract({ userAddress }: ScContractProps) {
       )}
 
       <FactoryActions
-        userAddress={userAddress}
+        userAddress={userAddress as `0x${string}`}
         walletRefetch={walletRefetch}
       />
 
       {addressIsReady && scAddress && (
         <div>
           <ScStats
-            scAddress={scAddress}
+            scAddress={scAddress as `0x${string}`}
             userAddress={userAddress}
             quorem={quorem || 0}
             owners={owners}
           />
           <UserFeatures
-            scAddress={scAddress}
+            scAddress={scAddress as `0x${string}`}
             userAddress={userAddress}
             quorem={quorem || 0}
             isOwner={isOwner}
