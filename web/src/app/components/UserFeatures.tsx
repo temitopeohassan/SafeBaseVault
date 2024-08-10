@@ -26,8 +26,22 @@ interface Transaction {
   amount: bigint;
   approvals: bigint;
   sent: boolean;
-  id?: number;
+  id: number;
 }
+
+type CreateWithdrawTxEvent = {
+  amount: bigint;
+  transactionindex: bigint;
+};
+
+type ApproveWithdrawTxEvent = {
+  transactionIndex: bigint;
+};
+
+type CustomLog = {
+  args: CreateWithdrawTxEvent | ApproveWithdrawTxEvent;
+};
+
 
 function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesProps) {
   const multiSigWalletContract = {
@@ -42,14 +56,16 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
     address: scAddress,
     abi: MultiSigWallet.abi,
     eventName: "CreateWithdrawTx",
-    onLog(logs: { args: any }[]) { // Cast logs to include args
-      const userEvent = logs[0].args; // Ensure logs[0] has the correct structure
-      const depositedAmt = formatEther(userEvent?.amount?.toString() || "0");
-      toast.success(
-        `Withdrawal txnId: ${parseInt(
-          userEvent?.transactionindex.toString() || "0"
-        )} with withdrawal amount: ${depositedAmt} Eth created!`
-      );
+    onLogs: (logs: CustomLog[]) => {
+      logs.forEach((log) => {
+        const event = log as unknown as { args: CreateWithdrawTxEvent };
+        if (event.args) {
+          const depositedAmt = formatEther(event.args.amount);
+          toast.success(
+            `Withdrawal txnId: ${event.args.transactionindex.toString()} with withdrawal amount: ${depositedAmt} Eth created!`
+          );
+        }
+      });
     },
   });
 
@@ -57,49 +73,45 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
     address: scAddress,
     abi: MultiSigWallet.abi,
     eventName: "ApproveWithdrawTx",
-    onLog(logs: { args: any }[]) { // Cast logs to include args
-      const userEvent = logs[0].args;
-      toast.success(
-        `txnId: ${parseInt(
-          userEvent?.transactionIndex.toString() || "0"
-        )} is approved and sent to recipient!`
-      );
+    onLogs: (logs: CustomLog[]) => {
+      logs.forEach((log) => {
+        const event = log as unknown as { args: ApproveWithdrawTxEvent };
+        if (event.args) {
+          toast.success(
+            `txnId: ${event.args.transactionIndex.toString()} is approved and sent to recipient!`
+          );
+        }
+      });
     },
   });
 
   const { data: readData, isLoading: readIsLoading } = useReadContract({
-    address: scAddress, // Use address instead of contracts
-    abi: MultiSigWallet.abi, // Add abi directly
+    address: scAddress,
+    abi: MultiSigWallet.abi,
     functionName: "getWithdrawTxes",
   });
 
-  const txnsWithId = !readIsLoading
-    ? (readData as { result: Transaction[] })?.[0]?.result?.map((txn, index) => ({
+  const txnsWithId = !readIsLoading && readData
+    ? (readData as Transaction[]).map((txn, index) => ({
         ...txn,
         id: index,
       }))
     : [];
 
-  const unapprovedTxns = txnsWithId?.filter(
-    (txn) => parseInt(txn?.approvals?.toString() || "0") < quorem
+  const unapprovedTxns = txnsWithId.filter(
+    (txn) => Number(txn.approvals) < quorem
   );
 
-  const {
-    data: writeData,
-    write: depositWrite,
-    error: depositError,
-    isError: depositIsError,
-  } = useWriteContract({
-    ...multiSigWalletContract,
-    functionName: "deposit",
-    value: debouncedDeposit,
-    enabled: Boolean(debouncedDeposit),
+  const { data: writeData, writeAsync, error: depositError, isError: depositIsError } = useWriteContract({
+    address: scAddress as `0x${string}`,
+    abi: MultiSigWallet.abi,
+    functionName: 'deposit',
+    args: [debouncedDeposit], // Add function arguments if needed
   });
 
-  const { isLoading: depositIsLoading, isSuccess: depositIsSuccess } =
-    useTransaction({
-      hash: writeData?.hash,
-    });
+  const { isLoading: depositIsLoading, isSuccess: depositIsSuccess } = useTransaction({
+    hash: writeData ? (writeData as any).hash : undefined,
+  });
 
   const onChangeDeposit = (event: ChangeEvent<HTMLInputElement>) => {
     const amt = event.target.value;
@@ -135,8 +147,8 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
             <div className="user-button mt-4">
               <button
                 className="deposit-button bg-red-500 text-white py-2 px-4 rounded-md hover:bg-red-600 disabled:bg-gray-400"
-                disabled={!depositWrite || depositIsLoading}
-                onClick={() => depositWrite?.()}
+                disabled={!writeAsync || depositIsLoading}
+                onClick={() => writeAsync?.()}
               >
                 {depositIsLoading ? "Depositing..." : "Deposit"}
               </button>
@@ -145,7 +157,7 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
 
           {depositIsSuccess && (
             <div className="mt-4 text-green-500">
-              Successfully deposited {formatEther(depositAmt.toString())} ETH!
+              Successfully deposited {formatEther(depositAmt)} ETH!
               <div>
                 <a
                   className="text-blue-500 underline"
@@ -158,7 +170,7 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
               </div>
             </div>
           )}
-          {(depositIsError) && (
+          {depositIsError && (
             <div className="custom-word-wrap text-red-500">
               Error: {depositError?.message}
             </div>
@@ -186,7 +198,7 @@ function UserFeatures({ scAddress, userAddress, quorem, isOwner }: UserFeaturesP
                   <td className="py-2 px-4 border-b">{txn.id}</td>
                   <td className="py-2 px-4 border-b">{txn?.to}</td>
                   <td className="py-2 px-4 border-b">
-                    {formatEther(txn?.amount?.toString())} Eth
+                    {formatEther(txn?.amount)} Eth
                   </td>
                   <td className="py-2 px-4 border-b">{`${txn?.approvals}`}</td>
                   <td className="py-2 px-4 border-b">{`${txn?.sent}`}</td>
