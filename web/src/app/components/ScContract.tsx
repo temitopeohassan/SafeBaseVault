@@ -8,6 +8,9 @@ import contractABI from "../artifacts/contracts/MultiSigWallet.sol/MultiSigWalle
 import factoryABI from "../artifacts/contracts/Factory.sol/Factory.json";
 import FactoryActions from "./FactoryActions";
 
+// Log all environment variables
+console.log("All Environment Variables:", process.env);
+
 const factoryContract = {
   address: process.env.REACT_APP_FACTORY_ADDRESS as `0x${string}`,
   abi: factoryABI.abi,
@@ -21,8 +24,10 @@ function ScContract({ userAddress }: ScContractProps) {
   const [addressIsReady, setAddressIsReady] = useState(false);
   const [scAddress, setScAddress] = useState<string | undefined>();
 
+  // Fetch factory contract data with error handling
   const {
     data: factoryReadData,
+    error: factoryReadError,
     isLoading: factoryIsLoading,
     isSuccess: factoryReadIsSuccess,
     refetch: walletRefetch,
@@ -30,14 +35,32 @@ function ScContract({ userAddress }: ScContractProps) {
     address: factoryContract.address,
     abi: factoryContract.abi,
     functionName: "getWalletList",
-  }) as { data: string[] | undefined, isLoading: boolean, isSuccess: boolean, refetch: () => void };
+  }) as {
+    data: string[] | undefined;
+    error: Error | undefined;
+    isLoading: boolean;
+    isSuccess: boolean;
+    refetch: () => void;
+  };
+
+  if (factoryReadError) {
+    console.error("Error reading factory contract:", factoryReadError);
+  }
+
+  console.log("Factory contract address:", factoryContract.address);
+  console.log("Factory read data:", factoryReadData);
 
   const smartContract = {
     address: scAddress as `0x${string}`,
     abi: contractABI.abi,
   };
 
-  const { data: readData, isSuccess } = useReadContracts({
+  // Fetch smart contract data with error handling
+  const {
+    data: readData,
+    error: readError,
+    isSuccess,
+  } = useReadContracts({
     contracts: [
       {
         address: smartContract.address,
@@ -52,9 +75,22 @@ function ScContract({ userAddress }: ScContractProps) {
     ],
   });
 
-  const quorem = scAddress && isSuccess ? parseInt(readData?.[0]?.result as string) : null;
-  const owners = scAddress && isSuccess ? (readData?.[1]?.result as string[]) : [];
+  if (readError) {
+    console.error("Error reading smart contract:", readError);
+  }
+
+  console.log("Smart contract address:", smartContract.address);
+  console.log("Read contracts data:", readData);
+
+  const quorem =
+    scAddress && isSuccess ? parseInt(readData?.[0]?.result as string) : null;
+  const owners =
+    scAddress && isSuccess ? (readData?.[1]?.result as string[]) : [];
   const isOwner = owners?.includes(userAddress);
+
+  console.log("Quorum:", quorem);
+  console.log("Owners:", owners);
+  console.log("Is owner:", isOwner);
 
   return (
     <div className="mt-5">
@@ -75,6 +111,7 @@ function ScContract({ userAddress }: ScContractProps) {
                 onChange={(e: ChangeEvent<HTMLSelectElement>) => {
                   if (isAddress(e.target.value)) {
                     setScAddress(e.target.value);
+                    console.log("Selected contract address:", e.target.value);
                   }
                 }}
               >
@@ -90,15 +127,23 @@ function ScContract({ userAddress }: ScContractProps) {
             <div className="flex space-x-4">
               <button
                 className="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 disabled:bg-red-300"
-                disabled={!scAddress || !isAddress(scAddress) || factoryIsLoading}
-                onClick={() => setAddressIsReady(true)}
+                disabled={
+                  !scAddress || !isAddress(scAddress) || factoryIsLoading
+                }
+                onClick={() => {
+                  setAddressIsReady(true);
+                  console.log("Address is ready:", true);
+                }}
               >
                 Display
               </button>
               <button
                 className="px-4 py-2 bg-red-500 text-white font-semibold rounded-md hover:bg-red-600 disabled:bg-red-300"
                 disabled={!addressIsReady || factoryIsLoading}
-                onClick={() => setAddressIsReady(false)}
+                onClick={() => {
+                  setAddressIsReady(false);
+                  console.log("Address is ready:", false);
+                }}
               >
                 Close Contract
               </button>
